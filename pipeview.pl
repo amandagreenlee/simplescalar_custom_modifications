@@ -53,10 +53,6 @@
 #
 
 
-#
-# TODO: check live lengths...
-#
-
 if (@ARGV != 1)
   {
     print STDERR "Usage: pview <pipe_trace>\n";

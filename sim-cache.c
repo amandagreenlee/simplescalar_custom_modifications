@@ -235,6 +235,7 @@ static char *itlb_opt /* = "none" */;
 static char *dtlb_opt /* = "none" */;
 static int flush_on_syscalls /* = FALSE */;
 static int compress_icache_addrs /* = FALSE */;
+static int prefetch /* = FALSE */;
 
 /* text-based stat profiles */
 static int pcstat_nelt = 0;
@@ -282,8 +283,8 @@ sim_reg_options(struct opt_odb_t *odb)	/* options database */
 "    <assoc>  - associativity of the cache\n"
 "    <repl>   - block replacement strategy, 'l'-LRU, 'f'-FIFO, 'r'-random\n"
 "\n"
-"    Examples:   -cache:dl1 dl1:4096:32:1:l\n"
-"                -dtlb dtlb:128:4096:32:r\n"
+"    Examples:   -cache:dl1 dl1:4096:32:1:l:yes\n"
+"                -dtlb dtlb:128:4096:32:r:no\n"
 	       );
   opt_reg_string(odb, "-cache:dl2",
 		 "l2 data cache config, i.e., {<config>|none}",
@@ -319,6 +320,11 @@ sim_reg_options(struct opt_odb_t *odb)	/* options database */
 	       "convert 64-bit inst addresses to 32-bit inst equivalents",
 	       &compress_icache_addrs, /* default */FALSE,
 	       /* print */TRUE, NULL);
+  opt_reg_flag(odb, "-cache:prefetch",
+	       "prefetch?",
+	       &compress_icache_addrs, /* default */FALSE,
+	       /* print */TRUE, NULL);
+
 
   opt_reg_string_list(odb, "-pcstat",
 		      "profile stat(s) against text addr's (mult uses ok)",
@@ -721,6 +727,7 @@ dcache_access_fn(struct mem_t *mem,	/* memory space to access */
       sys_syscall(&regs, mem_access, mem, INST, TRUE))			\
    : sys_syscall(&regs, dcache_access_fn, mem, INST, TRUE))
 
+/* TODO: I believe the code I need go add for the GHB should go here */
 /* start simulation, program loaded, processor precise state initialized */
 void
 sim_main(void)
