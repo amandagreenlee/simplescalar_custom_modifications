@@ -187,6 +187,9 @@ static int flush_on_syscalls;
 /* convert 64-bit inst addresses to 32-bit inst equivalents */
 static int compress_icache_addrs;
 
+/* AMANDA */
+static int prefetch;
+
 /* memory access latency (<first_chunk> <inter_chunk>) */
 static int mem_nelt = 2;
 static int mem_lat[2] =
@@ -811,6 +814,12 @@ sim_reg_options(struct opt_odb_t *odb)
 	       "convert 64-bit inst addresses to 32-bit inst equivalents",
 	       &compress_icache_addrs, /* default */FALSE,
 	       /* print */TRUE, NULL);
+
+  opt_reg_flag(odb, "-cache:prefetch",
+	       "prefetch?",
+	       &prefetch, /* default */FALSE,
+	       /* print */TRUE, NULL);
+
 
   /* mem options */
   opt_reg_int_list(odb, "-mem:lat",
@@ -3264,10 +3273,12 @@ simoo_mem_obj(struct mem_t *mem,		/* memory space to access */
 #endif
 
   /* else, no error, access memory */
-  if (spec_mode)
+  if(spec_mode) {
     spec_mem_access(mem, cmd, addr, p, nbytes);
-  else
+  } else {
+    /* TODO: I believe the code I need to add for the GHB should go here */
     mem_access(mem, cmd, addr, p, nbytes);
+  }
 
   /* no error */
   return NULL;

@@ -235,7 +235,6 @@ static char *itlb_opt /* = "none" */;
 static char *dtlb_opt /* = "none" */;
 static int flush_on_syscalls /* = FALSE */;
 static int compress_icache_addrs /* = FALSE */;
-static int prefetch /* = FALSE */;
 
 /* text-based stat profiles */
 static int pcstat_nelt = 0;
@@ -318,10 +317,6 @@ sim_reg_options(struct opt_odb_t *odb)	/* options database */
 	       &flush_on_syscalls, /* default */FALSE, /* print */TRUE, NULL);
   opt_reg_flag(odb, "-cache:icompress",
 	       "convert 64-bit inst addresses to 32-bit inst equivalents",
-	       &compress_icache_addrs, /* default */FALSE,
-	       /* print */TRUE, NULL);
-  opt_reg_flag(odb, "-cache:prefetch",
-	       "prefetch?",
 	       &compress_icache_addrs, /* default */FALSE,
 	       /* print */TRUE, NULL);
 
@@ -727,7 +722,6 @@ dcache_access_fn(struct mem_t *mem,	/* memory space to access */
       sys_syscall(&regs, mem_access, mem, INST, TRUE))			\
    : sys_syscall(&regs, dcache_access_fn, mem, INST, TRUE))
 
-/* TODO: I believe the code I need go add for the GHB should go here */
 /* start simulation, program loaded, processor precise state initialized */
 void
 sim_main(void)
@@ -779,32 +773,32 @@ sim_main(void)
       MD_SET_OPCODE(op, inst);
 
       /* execute the instruction */
-      switch (op)
-	{
-#define DEFINST(OP,MSK,NAME,OPFORM,RES,FLAGS,O1,O2,I1,I2,I3)		\
-	case OP:							\
-          SYMCAT(OP,_IMPL);						\
-          break;
-#define DEFLINK(OP,MSK,NAME,MASK,SHIFT)					\
-        case OP:							\
-          panic("attempted to execute a linking opcode");
-#define CONNECT(OP)
-#define DECLARE_FAULT(FAULT)						\
-	  { fault = (FAULT); break; }
-#include "machine.def"
-	default:
-          panic("attempted to execute a bogus opcode");
-	}
+      /* Amanda: is SYMCAT symbol concatenation? */
+      switch (op) {
+      #define DEFINST(OP,MSK,NAME,OPFORM,RES,FLAGS,O1,O2,I1,I2,I3)		\
+	    case OP:							\
+        SYMCAT(OP,_IMPL);						\
+        break;
+      #define DEFLINK(OP,MSK,NAME,MASK,SHIFT)					\
+      case OP:							\
+        panic("attempted to execute a linking opcode");
+        #define CONNECT(OP)
+        #define DECLARE_FAULT(FAULT)						\
+	      { fault = (FAULT); break; }
+      #include "machine.def"
+	    default:
+        panic("attempted to execute a bogus opcode");
+	    }
 
       if (fault != md_fault_none)
 	fatal("fault (%d) detected @ 0x%08p", fault, regs.regs_PC);
 
-      if (MD_OP_FLAGS(op) & F_MEM)
-	{
-	  sim_num_refs++;
-	  if (MD_OP_FLAGS(op) & F_STORE)
-	    is_write = TRUE;
-	}
+      if (MD_OP_FLAGS(op) & F_MEM) {
+	      sim_num_refs++;
+	      if (MD_OP_FLAGS(op) & F_STORE) {
+	        is_write = TRUE;
+        }
+	    }
 
       /* update any stats tracked by PC */
       for (i=0; i < pcstat_nelt; i++)
