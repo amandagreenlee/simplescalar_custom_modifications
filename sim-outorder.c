@@ -3276,7 +3276,6 @@ simoo_mem_obj(struct mem_t *mem,		/* memory space to access */
   if(spec_mode) {
     spec_mem_access(mem, cmd, addr, p, nbytes);
   } else {
-    /* TODO: I believe the code I need to add for the GHB should go here */
     mem_access(mem, cmd, addr, p, nbytes);
   }
 

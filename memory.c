@@ -134,6 +134,7 @@ mem_newpage(struct mem_t *mem,		/* memory space to allocate in */
   mem->page_count++;
 }
 
+/* TODO: I believe the index table should go in here somewhere */
 /* generic memory access function, it's safe because alignments and permissions
    are checked, handles any natural transfer sizes; note, faults out if nbytes
    is not a power-of-two or larger then MD_PAGE_SIZE */

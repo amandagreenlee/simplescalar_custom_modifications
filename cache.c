@@ -527,6 +527,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   if ((addr + nbytes) > ((addr & ~cp->blk_mask) + cp->bsize))
     fatal("cache: access error: access spans block, addr 0x%08x", addr);
 
+  /* TODO: Somewhere in here, look in the index table first */
+
   /* permissions are checked on cache misses */
 
   /* check for a fast hit: access to same block */
@@ -566,6 +568,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
 
   /* **MISS** */
   cp->misses++;
+
+  /* TODO: If it's a miss, store it in our table. */
 
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
