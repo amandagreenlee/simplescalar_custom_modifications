@@ -401,6 +401,12 @@ cache_create(char *name,		/* name of the cache */
   return cp;
 }
 
+/* AMANDA: Instantiate the structs needed for the GHB. Set n=32 for now. */
+index_table index_table[32];
+ghb ghb[32];
+int index_table_n = 32;
+int next_index_table_address = 0;
+
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
 cache_char2policy(char c)		/* replacement policy as a char */
@@ -527,7 +533,13 @@ cache_access(struct cache_t *cp,	/* cache to access */
   if ((addr + nbytes) > ((addr & ~cp->blk_mask) + cp->bsize))
     fatal("cache: access error: access spans block, addr 0x%08x", addr);
 
-  /* TODO: Somewhere in here, look in the index table first */
+  /* AMANDA: Look in the index table first for the cache address */
+  for(int i = 0; i < n; i++) {
+    if(index_table[i].miss_address == addr) {
+      /* TODO: Return thing? */
+      ;
+    }
+  }
 
   /* permissions are checked on cache misses */
 
@@ -569,7 +581,9 @@ cache_access(struct cache_t *cp,	/* cache to access */
   /* **MISS** */
   cp->misses++;
 
-  /* TODO: If it's a miss, store it in our table. */
+  /* AMANDA: If it's a miss, store cache address in our table. */
+  index_table[next_index_table_address] = addr;
+  next_index_table_address++;
 
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
