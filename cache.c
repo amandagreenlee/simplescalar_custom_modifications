@@ -402,8 +402,8 @@ cache_create(char *name,		/* name of the cache */
 }
 
 /* AMANDA: Instantiate the structs needed for the GHB. Set n=32 for now. */
-index_table index_table[32];
-ghb ghb[32];
+struct index_table index_table[32];
+struct ghb ghb[32];
 int index_table_n = 32;
 int next_index_table_address = 0;
 
@@ -534,10 +534,22 @@ cache_access(struct cache_t *cp,	/* cache to access */
     fatal("cache: access error: access spans block, addr 0x%08x", addr);
 
   /* AMANDA: Look in the index table first for the cache address */
-  for(int i = 0; i < n; i++) {
-    if(index_table[i].miss_address == addr) {
-      /* TODO: Return thing? */
-      ;
+  int i;
+  for(i = 0; i < index_table_n; i++) {
+    if(index_table[i].address == addr) {
+        /* Prefetch hit! */
+        printf("Prefetch Hit!");
+        if (cp->balloc)
+          {
+            CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+          }
+        if (cmd == Write)
+          blk->status |= CACHE_BLK_DIRTY;
+        if (udata)
+          *udata = blk->user_data;
+        cp->last_tagset = CACHE_TAGSET(cp, addr);
+        cp->last_blk = blk;
+        return (int) MAX(cp->hit_latency, (blk->ready - now));
     }
   }
 
@@ -582,7 +594,8 @@ cache_access(struct cache_t *cp,	/* cache to access */
   cp->misses++;
 
   /* AMANDA: If it's a miss, store cache address in our table. */
-  index_table[next_index_table_address] = addr;
+  /* TODO: Is this even a prefetch? We're not predicting anything. */
+  index_table[next_index_table_address].miss_address = addr;
   next_index_table_address++;
 
   /* select the appropriate block to replace, and re-link this entry to

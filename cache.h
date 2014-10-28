@@ -227,17 +227,6 @@ cache_create(char *name,		/* name of the cache */
 					   tick_t now),
 	     unsigned int hit_latency);/* latency in cycles for a hit */
 
-/* AMANDA: Add index table for GHB
-* An Index Table that is accessed with a key as in conventional
-* prefetch tables. The key may be a load instruction's PC, a
-* cache miss address, or some combination. The entries in the 
-* Index Table contain pointers into the Global History Buffer.
-*/
-struct index_table {
-     char* miss_address;
-     ghb* ghb;
-};
-
 /* AMANDA: Add GHB (Global History Buffer)
 * The GHB is an n-entry FIFO table implemented as a circular 
 * buffer that holds the n most recent L2 miss addresses. Each
@@ -247,8 +236,21 @@ struct index_table {
 * addresses that have the same Index Table key.
 */
 struct ghb {
-    char* miss_address;
-    ghb* next;  
+    md_addr_t address;
+    struct ghb* next;
+};
+
+/* AMANDA: Add index table for GHB
+* An Index Table that is accessed with a key as in conventional
+* prefetch tables. The key may be a load instruction's PC, a
+* cache miss address, or some combination. The entries in the 
+* Index Table contain pointers into the Global History Buffer.
+*/
+/* TODO: Not sure if the block goes here or not */
+struct index_table {
+     md_addr_t address;
+     struct cache_blk_t *block;
+     struct ghb* ghb;
 };
 
 /* parse policy */
