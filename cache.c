@@ -401,11 +401,12 @@ cache_create(char *name,		/* name of the cache */
   return cp;
 }
 
-/* AMANDA: Instantiate the structs needed for the GHB. Set n=32 for now. */
-struct index_table index_table[32];
-struct ghb ghb[32];
-int index_table_n = 32;
-int next_index_table_address = 0;
+/* AMANDA: Instantiate the structs needed for the prefetcher as parallel arrays. Set n=32 for now. */
+int prefetch_data_table_n = 32;
+struct prefetch_data_table prefetch_data_table[32];
+struct markov_model markov_model[32];
+int next_prefetch_data_table_address = 0;
+previous_miss_address = 0;
 
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
@@ -533,25 +534,7 @@ cache_access(struct cache_t *cp,	/* cache to access */
   if ((addr + nbytes) > ((addr & ~cp->blk_mask) + cp->bsize))
     fatal("cache: access error: access spans block, addr 0x%08x", addr);
 
-  /* AMANDA: Look in the index table first for the cache address */
-  int i;
-  for(i = 0; i < index_table_n; i++) {
-    if(index_table[i].address == addr) {
-        /* Prefetch hit! */
-        printf("Prefetch Hit!");
-        if (cp->balloc)
-          {
-            CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
-          }
-        if (cmd == Write)
-          blk->status |= CACHE_BLK_DIRTY;
-        if (udata)
-          *udata = blk->user_data;
-        cp->last_tagset = CACHE_TAGSET(cp, addr);
-        cp->last_blk = blk;
-        return (int) MAX(cp->hit_latency, (blk->ready - now));
-    }
-  }
+  
 
   /* permissions are checked on cache misses */
 
@@ -591,6 +574,35 @@ cache_access(struct cache_t *cp,	/* cache to access */
   /* cache block not found */
 
   /* **MISS** */
+
+  /* AMANDA: Look in the prefetch data table first for the cache address */
+  int i;
+  for(i = 0; i < prefetch_data_table_n; i++) {
+    if(prefetch_data_table[i].address == addr) {
+        /* Prefetch hit! */
+        printf("Prefetch Hit!");
+        if(markov_model[i].predictions != NULL) {
+          int j;
+          for(j = 0; j < prefetch_data_table_n-1; j++) {
+            /* TODO: Update the prediction for the previous_miss_address */
+          }
+        }
+
+        /* The below is copypasta for cache hit */
+        if (cp->balloc)
+          {
+            CACHE_BCOPY(cmd, blk, bofs, p, nbytes);
+          }
+        if (cmd == Write)
+          blk->status |= CACHE_BLK_DIRTY;
+        if (udata)
+          *udata = blk->user_data;
+        cp->last_tagset = CACHE_TAGSET(cp, addr);
+        cp->last_blk = blk;
+        return (int) MAX(cp->hit_latency, (blk->ready - now));
+    }
+  }
+
   cp->misses++;
 
   /* AMANDA: If it's a miss, store cache address in our table. */

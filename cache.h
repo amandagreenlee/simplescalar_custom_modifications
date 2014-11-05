@@ -227,31 +227,29 @@ cache_create(char *name,		/* name of the cache */
 					   tick_t now),
 	     unsigned int hit_latency);/* latency in cycles for a hit */
 
-/* AMANDA: Add GHB (Global History Buffer)
-* The GHB is an n-entry FIFO table implemented as a circular 
-* buffer that holds the n most recent L2 miss addresses. Each
-* GHB entry stores a global miss address and a link pointer. The
-* link pointers are used to chain the GHB entries into address
-* lists. Each address list is the time-ordered sequence of
-* addresses that have the same Index Table key.
-*/
-struct ghb {
+/* AMANDA: Add Markov Model
+* The markov model is an n-entry table.
+*
+* Each entry will contain the miss address, with parallel arrays containing 
+* all predictions and the weights (percentage of times this particular miss 
+* follows that particular miss).
+* */
+struct markov_model {
     md_addr_t address;
-    struct ghb* next;
+    md_addr_t* predictions;
+    int* weights;
+    int predictions_count;
 };
 
-/* AMANDA: Add index table for GHB
-* An Index Table that is accessed with a key as in conventional
-* prefetch tables. The key may be a load instruction's PC, a
-* cache miss address, or some combination. The entries in the 
-* Index Table contain pointers into the Global History Buffer.
+/* AMANDA: Add prefetch data table
+* The data we currently have prefetched.
 */
-/* TODO: Not sure if the block goes here or not */
-struct index_table {
+struct prefetch_data_table {
      md_addr_t address;
      struct cache_blk_t *block;
-     struct ghb* ghb;
 };
+
+md_addr_t previous_miss_address;
 
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
