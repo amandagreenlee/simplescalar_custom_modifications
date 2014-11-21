@@ -579,14 +579,30 @@ cache_access(struct cache_t *cp,	/* cache to access */
   int i;
   for(i = 0; i < prefetch_data_table_n; i++) {
     if(prefetch_data_table[i].address == addr) {
-        /* Prefetch hit! */
-        printf("Prefetch Hit!");
-        if(markov_model[i].predictions != NULL) {
-          int j;
-          for(j = 0; j < prefetch_data_table_n-1; j++) {
-            /* TODO: Update the prediction for the previous_miss_address */
+      /* Prefetch hit! */
+      printf("Prefetch Hit!");
+
+      int j;
+      for(j = 0; j < prefetch_data_table_n; j++) {
+        if(markov_model[j].address == previous_miss_address) {
+          int k;
+          bool prediction_exists = false;
+          /* Update the prediction weight for the previous_miss_address */
+          for(k = 0; k < markov_model[j].predictions_count; k++) {
+            if(markov_model[j].predictions[k] == addr) {
+              prediction_exists = true;
+              markov_model[j].weights[k]++;
+            }
+          }
+          /* If the prediction doesn't exist, create it */
+          if(!prediction_exists) {
+            markov_model[j].predictions_count++;
+            markov_model[j].predictions[predictions_count] = addr;
+            markov_model[j].weights[predictions_count] = 1;
           }
         }
+      }
+      previous_miss_address = addr;  
 
         /* The below is copypasta for cache hit */
         if (cp->balloc)
@@ -603,12 +619,39 @@ cache_access(struct cache_t *cp,	/* cache to access */
     }
   }
 
-  cp->misses++;
+  /* Amanda: Prefetch here */
+  for(i = 0; i < prefetch_data_table_n; i++) {
+    if(markov_model[i].address == addr) {
+      int j;
+      int total = 0;
+      for(j = 0; j < markov_model[i].predictions_count; j++) {
+        total += markov_model[i].weights[j];
+      }
+      srand(time(NULL));
+      int random = rand() % total;
+      for(j = 0; j < markov_model[i].predictions_count; j++) {
+        if(random < markov_model[i].weights[j]) {
+          /* Prefetch this one */
+          /* Get the block data and place it into our block */
+          int k;
+          int already_here = false;
+          for(k = 0; k < prefetch_data_table_n; k++) {
+            if(prefetch_data_table[j].address == markov_model[i].predictions[j]) {
+              /* It's already here, don't worry about it */
+              already_here = true;
+            }
+          }
+          if(!already_here) {
+            cp->blk_access_fn(Read, CACHE_BADDR(cp, markov_model[i].predictions[j]), cp->bsize, prefetch_data_table[prefetch_data_table_n].block, now+lat);
+            prefetch_data_table_n++;
+          }
+        }
+      }
+        random -= markov_model[i].weights[j];
+    }
+  }
 
-  /* AMANDA: If it's a miss, store cache address in our table. */
-  /* TODO: Is this even a prefetch? We're not predicting anything. */
-  index_table[next_index_table_address].miss_address = addr;
-  next_index_table_address++;
+  cp->misses++;
 
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
