@@ -406,7 +406,7 @@ int prefetch_data_table_n = 32;
 struct prefetch_data_table prefetch_data_table[32];
 struct markov_model markov_model[32];
 int next_prefetch_data_table_address = 0;
-previous_miss_address = 0;
+md_addr_t previous_miss_address = 0;
 
 /* parse policy */
 enum cache_policy			/* replacement policy enum */
@@ -586,19 +586,19 @@ cache_access(struct cache_t *cp,	/* cache to access */
       for(j = 0; j < prefetch_data_table_n; j++) {
         if(markov_model[j].address == previous_miss_address) {
           int k;
-          bool prediction_exists = false;
+          int prediction_exists = 0;
           /* Update the prediction weight for the previous_miss_address */
           for(k = 0; k < markov_model[j].predictions_count; k++) {
             if(markov_model[j].predictions[k] == addr) {
-              prediction_exists = true;
+              prediction_exists = 1;
               markov_model[j].weights[k]++;
             }
           }
           /* If the prediction doesn't exist, create it */
           if(!prediction_exists) {
             markov_model[j].predictions_count++;
-            markov_model[j].predictions[predictions_count] = addr;
-            markov_model[j].weights[predictions_count] = 1;
+            markov_model[j].predictions[markov_model[j].predictions_count] = addr;
+            markov_model[j].weights[markov_model[j].predictions_count] = 1;
           }
         }
       }
@@ -627,18 +627,17 @@ cache_access(struct cache_t *cp,	/* cache to access */
       for(j = 0; j < markov_model[i].predictions_count; j++) {
         total += markov_model[i].weights[j];
       }
-      srand(time(NULL));
-      int random = rand() % total;
+      int random = myrand() % total;
       for(j = 0; j < markov_model[i].predictions_count; j++) {
         if(random < markov_model[i].weights[j]) {
           /* Prefetch this one */
           /* Get the block data and place it into our block */
           int k;
-          int already_here = false;
+          int already_here = 0;
           for(k = 0; k < prefetch_data_table_n; k++) {
             if(prefetch_data_table[j].address == markov_model[i].predictions[j]) {
               /* It's already here, don't worry about it */
-              already_here = true;
+              already_here = 1;
             }
           }
           if(!already_here) {
