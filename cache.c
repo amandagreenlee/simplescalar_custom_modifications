@@ -404,8 +404,9 @@ cache_create(char *name,		/* name of the cache */
 /* AMANDA: Instantiate the structs needed for the prefetcher as parallel arrays. Set n=32 for now. */
 int prefetch_data_table_n = 32;
 struct prefetch_data_table prefetch_data_table[32];
-struct markov_model markov_model[32];
 int next_prefetch_data_table_address = 0;
+struct markov_model markov_model[32];
+int next_markov_model_address = 0;
 md_addr_t previous_miss_address = 0;
 
 /* parse policy */
@@ -485,7 +486,7 @@ void
 cache_stats(struct cache_t *cp,		/* cache instance */
 	    FILE *stream)		/* output stream */
 {
-  double sum = (double)(cp->hits + cp->misses);
+/*  double sum = (double)(cp->hits + cp->misses);
 
   fprintf(stream,
 	  "cache: %s: %.0f hits %.0f misses %.0f repls %.0f invalidations\n",
@@ -496,6 +497,28 @@ cache_stats(struct cache_t *cp,		/* cache instance */
 	  cp->name,
 	  (double)cp->misses/sum, (double)(double)cp->replacements/sum,
 	  (double)cp->invalidations/sum);
+  */
+}
+
+/* AMANDA: My functions to increase the size of an array */
+md_addr_t* increase_size_of_address_array(md_addr_t* array, int current_size)
+{
+  md_addr_t* return_array = (md_addr_t *) malloc((current_size+1)*sizeof(int));
+  int i;
+  for(i = 0; i < current_size; i++) {
+    return_array[i] = array[i];
+  }
+  return return_array;
+}
+
+int* increase_size_of_int_array(int* array, int current_size)
+{
+  int* return_array = (int *) malloc((current_size+1)*sizeof(int));
+  int i;
+  for(i = 0; i < current_size; i++) {
+    return_array[i] = array[i];
+  }
+  return return_array;
 }
 
 /* access a cache, perform a CMD operation on cache CP at address ADDR,
@@ -576,14 +599,16 @@ cache_access(struct cache_t *cp,	/* cache to access */
   /* **MISS** */
 
   /* AMANDA: Look in the prefetch data table first for the cache address */
+  printf("601\n");
   int i;
   for(i = 0; i < prefetch_data_table_n; i++) {
     if(prefetch_data_table[i].address == addr) {
       /* Prefetch hit! */
-      printf("Prefetch Hit!");
+      printf("Amanda Prefetch Hit!");
 
       int j;
       for(j = 0; j < prefetch_data_table_n; j++) {
+  printf("Amanda 589\n");
         if(markov_model[j].address == previous_miss_address) {
           int k;
           int prediction_exists = 0;
@@ -596,9 +621,12 @@ cache_access(struct cache_t *cp,	/* cache to access */
           }
           /* If the prediction doesn't exist, create it */
           if(!prediction_exists) {
-            markov_model[j].predictions_count++;
+  printf("Amanda 602\n");
+            markov_model[j].predictions = increase_size_of_address_array(markov_model[j].predictions, markov_model[j].predictions_count);
             markov_model[j].predictions[markov_model[j].predictions_count] = addr;
+            markov_model[j].weights = increase_size_of_int_array(markov_model[j].weights, markov_model[j].predictions_count);
             markov_model[j].weights[markov_model[j].predictions_count] = 1;
+            markov_model[j].predictions_count++;
           }
         }
       }
@@ -620,16 +648,31 @@ cache_access(struct cache_t *cp,	/* cache to access */
   }
 
   /* Amanda: Prefetch here */
+  int match = 0;
   for(i = 0; i < prefetch_data_table_n; i++) {
     if(markov_model[i].address == addr) {
+      match = 1;
+  printf("Amanda 630\n");
       int j;
+  printf("Amanda 631\n");
       int total = 0;
+  printf("Amanda 632\n");
       for(j = 0; j < markov_model[i].predictions_count; j++) {
+  printf("Amanda 634\n");
         total += markov_model[i].weights[j];
       }
-      int random = myrand() % total;
+  printf("Amanda 662\n");
+      int random;
+      if(total > 0) {
+        random = myrand() % total;
+      } else {
+        random = 0;
+      }
+  printf("Amanda 669\n");
       for(j = 0; j < markov_model[i].predictions_count; j++) {
+  printf("Amanda 639\n");
         if(random < markov_model[i].weights[j]) {
+  printf("Amanda 641\n");
           /* Prefetch this one */
           /* Get the block data and place it into our block */
           int k;
@@ -644,11 +687,25 @@ cache_access(struct cache_t *cp,	/* cache to access */
             cp->blk_access_fn(Read, CACHE_BADDR(cp, markov_model[i].predictions[j]), cp->bsize, prefetch_data_table[prefetch_data_table_n].block, now+lat);
             prefetch_data_table_n++;
           }
+          random -= markov_model[i].weights[j];
         }
       }
-        random -= markov_model[i].weights[j];
     }
   }
+      printf("Amanda 695\n");
+  /*
+   * If the address didn't exist in our markov model, add it
+   */
+  if(!match) {
+    printf("Amanda: Adding new entry to markov table.\n");
+    markov_model[next_markov_model_address].address = addr;
+    markov_model[next_markov_model_address].predictions = NULL;
+    markov_model[next_markov_model_address].weights = NULL;
+    markov_model[next_markov_model_address].predictions_count = 0;
+    next_markov_model_address++;
+    printf("Amanda 704\n");
+  }
+  printf("Amanda 704\n");
 
   cp->misses++;
 
