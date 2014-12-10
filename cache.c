@@ -727,7 +727,6 @@ cache_access(struct cache_t *cp,	/* cache to access */
   }
   /*
    * If the address didn't exist in our markov model, add it
-   * TODO: The following if block causes a segfault, fix!
    */
   if(!match && next_markov_model_address < 32) {
     markov_model[next_markov_model_address].address = addr;
