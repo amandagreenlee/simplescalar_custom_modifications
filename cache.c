@@ -335,6 +335,7 @@ cache_create(char *name,		/* name of the cache */
   /* initialize cache stats */
   cp->hits = 0;
   cp->misses = 0;
+  cp->prefetch_hits = 0;
   cp->replacements = 0;
   cp->writebacks = 0;
   cp->invalidations = 0;
@@ -458,6 +459,8 @@ cache_reg_stats(struct cache_t *cp,	/* cache instance */
   stat_reg_counter(sdb, buf, "total number of hits", &cp->hits, 0, NULL);
   sprintf(buf, "%s.misses", name);
   stat_reg_counter(sdb, buf, "total number of misses", &cp->misses, 0, NULL);
+  sprintf(buf, "%s.prefetch_hits", name);
+  stat_reg_counter(sdb, buf, "total number of prefetch_hits", &cp->prefetch_hits, 0, NULL);
   sprintf(buf, "%s.replacements", name);
   stat_reg_counter(sdb, buf, "total number of replacements",
 		 &cp->replacements, 0, NULL);
@@ -486,7 +489,7 @@ void
 cache_stats(struct cache_t *cp,		/* cache instance */
 	    FILE *stream)		/* output stream */
 {
-/*  double sum = (double)(cp->hits + cp->misses);
+  double sum = (double)(cp->hits + cp->misses);
 
   fprintf(stream,
 	  "cache: %s: %.0f hits %.0f misses %.0f repls %.0f invalidations\n",
@@ -497,7 +500,7 @@ cache_stats(struct cache_t *cp,		/* cache instance */
 	  cp->name,
 	  (double)cp->misses/sum, (double)(double)cp->replacements/sum,
 	  (double)cp->invalidations/sum);
-  */
+  
 }
 
 /* AMANDA: My functions to increase the size of an array */
@@ -599,16 +602,12 @@ cache_access(struct cache_t *cp,	/* cache to access */
   /* **MISS** */
 
   /* AMANDA: Look in the prefetch data table first for the cache address */
-  printf("601\n");
   int i;
+  int prefetch_hit = 0;
   for(i = 0; i < prefetch_data_table_n; i++) {
     if(prefetch_data_table[i].address == addr) {
-      /* Prefetch hit! */
-      printf("Amanda Prefetch Hit!");
-
       int j;
       for(j = 0; j < prefetch_data_table_n; j++) {
-  printf("Amanda 589\n");
         if(markov_model[j].address == previous_miss_address) {
           int k;
           int prediction_exists = 0;
@@ -621,7 +620,6 @@ cache_access(struct cache_t *cp,	/* cache to access */
           }
           /* If the prediction doesn't exist, create it */
           if(!prediction_exists) {
-  printf("Amanda 602\n");
             markov_model[j].predictions = increase_size_of_address_array(markov_model[j].predictions, markov_model[j].predictions_count);
             markov_model[j].predictions[markov_model[j].predictions_count] = addr;
             markov_model[j].weights = increase_size_of_int_array(markov_model[j].weights, markov_model[j].predictions_count);
@@ -643,36 +641,71 @@ cache_access(struct cache_t *cp,	/* cache to access */
           *udata = blk->user_data;
         cp->last_tagset = CACHE_TAGSET(cp, addr);
         cp->last_blk = blk;
+        printf("Prefetch Hit!!\n");
+        cp->prefetch_hits++;
+        prefetch_hit = 1;
+
+        /* Prefetch before we return */
+
+        int match = 0;
+          for(i = 0; i < prefetch_data_table_n; i++) {
+            if(markov_model[i].address == addr) {
+              match = 1;
+              int j;
+              int total = 0;
+              for(j = 0; j < markov_model[i].predictions_count; j++) {
+                total += markov_model[i].weights[j];
+              }
+              int random;
+              if(total > 0) {
+                random = myrand() % total;
+              } else {
+                random = 0;
+              }
+              for(j = 0; j < markov_model[i].predictions_count; j++) {
+                if(random < markov_model[i].weights[j]) {
+                  /* Prefetch this one */
+                  /* Get the block data and place it into our block */
+                  int k;
+                  int already_here = 0;
+                  for(k = 0; k < prefetch_data_table_n; k++) {
+                    if(prefetch_data_table[j].address == markov_model[i].predictions[j]) {
+                      /* It's already here, don't worry about it */
+                      already_here = 1;
+                    }
+                  }
+                  if(!already_here) {
+                    cp->blk_access_fn(Read, CACHE_BADDR(cp, markov_model[i].predictions[j]), cp->bsize, prefetch_data_table[prefetch_data_table_n].block, now+lat);
+                    prefetch_data_table_n++;
+                  }
+                  random -= markov_model[i].weights[j];
+                }
+              }
+            }
+          }
+
         return (int) MAX(cp->hit_latency, (blk->ready - now));
     }
   }
 
-  /* Amanda: Prefetch here */
+  /* If we had a prefetch miss, prefetch here */
   int match = 0;
   for(i = 0; i < prefetch_data_table_n; i++) {
     if(markov_model[i].address == addr) {
       match = 1;
-  printf("Amanda 630\n");
       int j;
-  printf("Amanda 631\n");
       int total = 0;
-  printf("Amanda 632\n");
       for(j = 0; j < markov_model[i].predictions_count; j++) {
-  printf("Amanda 634\n");
         total += markov_model[i].weights[j];
       }
-  printf("Amanda 662\n");
       int random;
       if(total > 0) {
         random = myrand() % total;
       } else {
         random = 0;
       }
-  printf("Amanda 669\n");
       for(j = 0; j < markov_model[i].predictions_count; j++) {
-  printf("Amanda 639\n");
         if(random < markov_model[i].weights[j]) {
-  printf("Amanda 641\n");
           /* Prefetch this one */
           /* Get the block data and place it into our block */
           int k;
@@ -692,22 +725,21 @@ cache_access(struct cache_t *cp,	/* cache to access */
       }
     }
   }
-      printf("Amanda 695\n");
   /*
    * If the address didn't exist in our markov model, add it
+   * TODO: The following if block causes a segfault, fix!
    */
-  if(!match) {
-    printf("Amanda: Adding new entry to markov table.\n");
+  if(!match && next_markov_model_address < 32) {
     markov_model[next_markov_model_address].address = addr;
     markov_model[next_markov_model_address].predictions = NULL;
     markov_model[next_markov_model_address].weights = NULL;
     markov_model[next_markov_model_address].predictions_count = 0;
     next_markov_model_address++;
-    printf("Amanda 704\n");
   }
-  printf("Amanda 704\n");
 
-  cp->misses++;
+  if(!prefetch_hit) {
+    cp->misses++;
+  }
 
   /* select the appropriate block to replace, and re-link this entry to
      the appropriate place in the way list */
